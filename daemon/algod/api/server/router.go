@@ -70,6 +70,7 @@ import (
 	"github.com/algorand/go-algorand/daemon/algod/api/server/common"
 	"github.com/algorand/go-algorand/daemon/algod/api/server/lib"
 	"github.com/algorand/go-algorand/daemon/algod/api/server/lib/middlewares"
+	"github.com/algorand/go-algorand/daemon/algod/api/server/sync"
 	"github.com/algorand/go-algorand/daemon/algod/api/server/v1/routes"
 	v2 "github.com/algorand/go-algorand/daemon/algod/api/server/v2"
 	npprivate "github.com/algorand/go-algorand/daemon/algod/api/server/v2/generated/nonparticipating/private"
@@ -154,6 +155,10 @@ func NewRouter(logger logging.Logger, node *node.AlgorandFullNode, shutdown <-ch
 	ppublic.RegisterHandlers(e, &v2Handler, apiAuthenticator)
 	pprivate.RegisterHandlers(e, &v2Handler, adminAuthenticator)
 
+	// Registering couchdb sync routes for archival nodes
+	if node.Config().Archival {
+		sync.RegisterHandlers(e, ctx)
+	}
 	return e
 }
 

@@ -479,7 +479,9 @@ func computeAppIndexFromTxn(tx node.TxnWithStatus, l *data.Ledger) uint64 {
 
 	return computeCreatableIndexInPayset(tx, blk.BlockHeader.TxnCounter, payset)
 }
-
+func BlockEncodeV1(b bookkeeping.Block, c agreement.Certificate) (v1.Block, error) {
+	return blockEncode(b, c)
+}
 func blockEncode(b bookkeeping.Block, c agreement.Certificate) (v1.Block, error) {
 	block := v1.Block{
 		Hash:              crypto.Digest(b.Hash()).String(),
