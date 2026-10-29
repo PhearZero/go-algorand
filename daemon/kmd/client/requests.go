@@ -38,7 +38,7 @@ func (kcl KMDClient) DoV1Request(req kmdapi.APIV1Request, resp kmdapi.APIV1Respo
 
 	// Encode the request
 	body = protocol.EncodeJSON(req)
-	fullPath := fmt.Sprintf("http://%s/%s", kcl.address, reqPath)
+	fullPath := kcl.endpointURL(reqPath)
 	hreq, err := http.NewRequest(reqMethod, fullPath, bytes.NewReader(body))
 	if err != nil {
 		return err

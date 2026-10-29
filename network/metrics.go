@@ -100,6 +100,10 @@ var networkPeerIdentityDisconnect = metrics.MakeCounter(metrics.MetricName{Name:
 var networkPeerIdentityError = metrics.MakeCounter(metrics.MetricName{Name: "algod_network_identity_error", Description: "number of times an error occurs (besides expected) when processing identity challenges"})
 var networkPeerAlreadyClosed = metrics.MakeCounter(metrics.MetricName{Name: "algod_network_peer_already_closed", Description: "number of times a peer would be added but the peer connection is already closed"})
 
+var networkTLSKeyExchange = metrics.NewTagCounter("algod_network_tls_key_exchange_{TAG}", "Number of TLS connections by negotiated key exchange")
+var networkTLSKeyExchangeRejected = metrics.MakeCounter(metrics.MetricName{Name: "algod_network_tls_key_exchange_rejected_total", Description: "Number of TLS connections rejected for not using X25519MLKEM768"})
+var networkTLSPeerCertificate = metrics.NewTagCounter("algod_network_tls_peer_certificate_{TAG}", "Number of TLS connections by peer certificate key algorithm")
+
 var networkSlowPeerDrops = metrics.MakeCounter(metrics.MetricName{Name: "algod_network_slow_drops_total", Description: "number of peers dropped for being slow to send to"})
 var networkIdlePeerDrops = metrics.MakeCounter(metrics.MetricName{Name: "algod_network_idle_drops_total", Description: "number of peers dropped due to idle connection"})
 

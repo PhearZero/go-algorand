@@ -17,6 +17,8 @@
 package kmd
 
 import (
+	"crypto/tls"
+	"fmt"
 	"os"
 	"time"
 
@@ -25,6 +27,7 @@ import (
 	"github.com/algorand/go-algorand/daemon/kmd/session"
 	"github.com/algorand/go-algorand/daemon/kmd/wallet/driver"
 	"github.com/algorand/go-algorand/logging"
+	"github.com/algorand/go-algorand/util/tlsutil"
 	"github.com/algorand/go-algorand/util/tokens"
 )
 
@@ -71,6 +74,17 @@ func Start(startConfig StartConfig) (died chan error, sock string, err error) {
 		}
 	}()
 
+	var tlsConfig *tls.Config
+	if (kmdCfg.TLSCertFile == "") != (kmdCfg.TLSKeyFile == "") {
+		return nil, "", fmt.Errorf("both tls_cert_file and tls_key_file must be configured")
+	}
+	if kmdCfg.TLSCertFile != "" {
+		tlsConfig, err = tlsutil.LoadServerConfig(kmdCfg.TLSCertFile, kmdCfg.TLSKeyFile, kmdCfg.TLSRequirePostQuantumKeyExchange, kmdCfg.TLSRequirePostQuantumSignature)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
 	// Configure the wallet API server
 	serverCfg := server.WalletServerConfig{
 		APIToken:       apiToken,
@@ -81,6 +95,7 @@ func Start(startConfig StartConfig) (died chan error, sock string, err error) {
 		SessionManager: sessionManager,
 		Log:            startConfig.Log,
 		Timeout:        startConfig.Timeout,
+		TLSConfig:      tlsConfig,
 	}
 
 	// Instantiate the wallet API server

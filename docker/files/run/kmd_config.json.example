@@ -15,5 +15,9 @@
 	},
 	"session_lifetime_secs": 60,
 	"address": "",
-	"allowed_origins": null
+	"allowed_origins": null,
+	"tls_cert_file": "",
+	"tls_key_file": "",
+	"tls_require_post_quantum_key_exchange": false,
+	"tls_require_post_quantum_signature": false
 }

@@ -28,10 +28,12 @@ import (
 
 	"github.com/algorand/go-algorand/cmd/kmd/codes"
 	"github.com/algorand/go-algorand/daemon/kmd/client"
+	kmdconfig "github.com/algorand/go-algorand/daemon/kmd/config"
 	"github.com/algorand/go-algorand/daemon/kmd/lib/kmdapi"
 	"github.com/algorand/go-algorand/daemon/kmd/server"
 	"github.com/algorand/go-algorand/logging"
 	"github.com/algorand/go-algorand/util"
+	"github.com/algorand/go-algorand/util/tlsutil"
 	"github.com/algorand/go-algorand/util/tokens"
 )
 
@@ -82,15 +84,26 @@ func (kc KMDController) KMDClient() (kmdClient client.KMDClient, err error) {
 		return
 	}
 
-	// Grab the socket file location
+	// Grab the server address
 	netFile := filepath.Join(kc.kmdDataDir, server.NetFilename)
 	sockPath, err := util.GetFirstLineFromFile(netFile)
 	if err != nil {
 		return
 	}
 
-	// Build the client
-	kmdClient, err = client.MakeKMDClient(sockPath, apiToken)
+	kmdCfg, err := kmdconfig.LoadKMDConfig(kc.kmdDataDir)
+	if err != nil {
+		return
+	}
+	tlsConfig := tlsutil.MakeClientConfig(kmdCfg.TLSRequirePostQuantumKeyExchange, kmdCfg.TLSRequirePostQuantumSignature)
+	if kmdCfg.TLSCertFile != "" {
+		tlsConfig, err = tlsutil.WithTrustedCertificate(tlsConfig, kmdCfg.TLSCertFile)
+		if err != nil {
+			return
+		}
+	}
+
+	kmdClient, err = client.MakeKMDClientWithTLS(sockPath, apiToken, tlsConfig)
 	return
 }
 
