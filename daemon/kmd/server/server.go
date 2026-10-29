@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -37,7 +38,7 @@ import (
 )
 
 const (
-	// NetFilename is the name of the net file in the kmd data dir
+	// NetFilename is the name of the endpoint address file in the kmd data dir.
 	NetFilename = "kmd.net"
 	// PIDFilename is the name of the PID file in the kmd data dir
 	PIDFilename = "kmd.pid"
@@ -59,6 +60,7 @@ type WalletServerConfig struct {
 	SessionManager *session.Manager
 	Log            logging.Logger
 	Timeout        *time.Duration
+	TLSConfig      *tls.Config
 }
 
 // WalletServer deals with serving API requests
@@ -142,7 +144,7 @@ func (ws *WalletServer) releaseFileLock() error {
 
 // Write out a file containing the address kmd is listening on
 func (ws *WalletServer) writeStateFiles(netAddr string) (err error) {
-	// netPath file contains path to sock file
+	// netPath file contains the server address.
 	err = os.WriteFile(ws.netPath, []byte(netAddr), 0640)
 	if err != nil {
 		return
@@ -256,6 +258,10 @@ func (ws *WalletServer) start(kill chan os.Signal) (died chan error, sock string
 
 	// Write out our net file
 	addr := listener.Addr().String()
+	if ws.TLSConfig != nil {
+		listener = tls.NewListener(listener, ws.TLSConfig)
+		addr = "https://" + addr
+	}
 	err = ws.writeStateFiles(addr)
 	if err != nil {
 		return

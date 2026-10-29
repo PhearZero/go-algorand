@@ -17,6 +17,7 @@
 package limitcaller
 
 import (
+	"crypto/tls"
 	"errors"
 	"net/http"
 	"time"
@@ -48,7 +49,7 @@ var ErrConnectionQueueingTimeout = errors.New("rateLimitingTransport: queueing t
 // MakeRateLimitingBoundTransport creates a rate limiting http transport that that:
 // 1. would limit the requests rate according to the entries in the phonebook.
 // 2. is bound to a specific target.
-func MakeRateLimitingBoundTransport(phonebook ConnectionTimeStore, queueingTimeout time.Duration, dialer *Dialer, maxIdleConnsPerHost int, target string) RateLimitingBoundTransport {
+func MakeRateLimitingBoundTransport(phonebook ConnectionTimeStore, queueingTimeout time.Duration, dialer *Dialer, maxIdleConnsPerHost int, target string, tlsConfig *tls.Config) RateLimitingBoundTransport {
 	defaultTransport := http.DefaultTransport.(*http.Transport)
 	innerTransport := &http.Transport{
 		Proxy:                 defaultTransport.Proxy,
@@ -56,6 +57,7 @@ func MakeRateLimitingBoundTransport(phonebook ConnectionTimeStore, queueingTimeo
 		MaxIdleConns:          defaultTransport.MaxIdleConns,
 		IdleConnTimeout:       defaultTransport.IdleConnTimeout,
 		TLSHandshakeTimeout:   defaultTransport.TLSHandshakeTimeout,
+		TLSClientConfig:       tlsConfig,
 		ExpectContinueTimeout: defaultTransport.ExpectContinueTimeout,
 		MaxIdleConnsPerHost:   maxIdleConnsPerHost,
 	}

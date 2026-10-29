@@ -20,7 +20,7 @@
 package config
 
 var defaultLocal = Local{
-	Version:                                    38,
+	Version:                                    39,
 	AccountUpdatesStatsInterval:                5000000000,
 	AccountsRebuildSynchronousMode:             1,
 	AgreementIncomingBundlesQueueLength:        15,
@@ -148,6 +148,8 @@ var defaultLocal = Local{
 	SuggestedFeeSlidingWindowSize:              50,
 	TLSCertFile:                                "",
 	TLSKeyFile:                                 "",
+	TLSRequirePostQuantumKeyExchange:           false,
+	TLSRequirePostQuantumSignature:             false,
 	TelemetryToLog:                             true,
 	TrackerDBDir:                               "",
 	TransactionSyncDataExchangeRate:            0,

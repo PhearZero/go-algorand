@@ -19,6 +19,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -89,6 +90,8 @@ func (e HTTPError) Error() string {
 type RestClient struct {
 	serverURL url.URL
 	apiToken  string
+	tlsConfig *tls.Config
+	transport *http.Transport
 }
 
 // MakeRestClient is the factory for constructing a RestClient for a given endpoint
@@ -97,6 +100,24 @@ func MakeRestClient(url url.URL, apiToken string) RestClient {
 		serverURL: url,
 		apiToken:  apiToken,
 	}
+}
+
+// MakeRestClientWithTLS constructs a REST client with a caller-provided TLS policy.
+func MakeRestClientWithTLS(url url.URL, apiToken string, tlsConfig *tls.Config) RestClient {
+	client := MakeRestClient(url, apiToken)
+	client.tlsConfig = tlsConfig
+	if tlsConfig != nil {
+		client.transport = http.DefaultTransport.(*http.Transport).Clone()
+		client.transport.TLSClientConfig = tlsConfig
+	}
+	return client
+}
+
+func (client RestClient) httpClient() *http.Client {
+	if client.tlsConfig == nil {
+		return &http.Client{}
+	}
+	return &http.Client{Transport: client.transport}
 }
 
 // filterASCII filter out the non-ascii printable characters out of the given input string.
@@ -211,7 +232,7 @@ func (client RestClient) submitForm(
 		req.Header.Set(authHeader, client.apiToken)
 	}
 
-	httpClient := &http.Client{}
+	httpClient := client.httpClient()
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
@@ -800,7 +821,7 @@ func (client RestClient) doGetWithQuery(ctx context.Context, path string, queryA
 
 	req.Header.Set(authHeader, client.apiToken)
 
-	httpClient := http.Client{}
+	httpClient := client.httpClient()
 	resp, err := httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return

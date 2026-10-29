@@ -18,6 +18,7 @@ package algod
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -47,6 +48,7 @@ import (
 	"github.com/algorand/go-algorand/node"
 	"github.com/algorand/go-algorand/util"
 	"github.com/algorand/go-algorand/util/metrics"
+	"github.com/algorand/go-algorand/util/tlsutil"
 	"github.com/algorand/go-algorand/util/tokens"
 )
 
@@ -383,6 +385,20 @@ func (s *Server) Start() {
 		listener, cfg.RestConnectionsHardLimit, s.log)
 
 	addr = listener.Addr().String()
+	endpointTLS := cfg.TLSCertFile != "" && cfg.TLSKeyFile != ""
+	var tlsConfig *tls.Config
+	if endpointTLS {
+		tlsConfig, err = tlsutil.LoadServerConfig(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSRequirePostQuantumKeyExchange, cfg.TLSRequirePostQuantumSignature)
+		if err != nil {
+			fmt.Printf("Could not start node: REST TLS configuration: %v\n", err)
+			os.Exit(1)
+		}
+		listener = tls.NewListener(listener, tlsConfig)
+	}
+	serverAddress := addr
+	if endpointTLS {
+		serverAddress = "https://" + addr
+	}
 	server = http.Server{
 		Addr:           addr,
 		ReadTimeout:    time.Duration(cfg.RestReadTimeoutSeconds) * time.Second,
@@ -404,7 +420,7 @@ func (s *Server) Start() {
 		fmt.Printf("pidfile error: %v\n", err)
 		os.Exit(1)
 	}
-	err = os.WriteFile(s.netFile, []byte(fmt.Sprintf("%s\n", addr)), 0644)
+	err = os.WriteFile(s.netFile, []byte(fmt.Sprintf("%s\n", serverAddress)), 0644)
 	if err != nil {
 		fmt.Printf("netfile error: %v\n", err)
 		os.Exit(1)
@@ -445,7 +461,11 @@ func (s *Server) Start() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	signal.Ignore(syscall.SIGHUP)
 
-	fmt.Printf("Node running and accepting RPC requests over HTTP on port %v. Press Ctrl-C to exit\n", addr)
+	protocolName := "HTTP"
+	if endpointTLS {
+		protocolName = "HTTPS"
+	}
+	fmt.Printf("Node running and accepting RPC requests over %s on port %v. Press Ctrl-C to exit\n", protocolName, addr)
 	select {
 	case err := <-errChan:
 		if err != nil {

@@ -17,6 +17,7 @@
 package nodecontrol
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/url"
 	"os"
@@ -31,6 +32,7 @@ import (
 	"github.com/algorand/go-algorand/data/bookkeeping"
 	"github.com/algorand/go-algorand/protocol"
 	"github.com/algorand/go-algorand/util"
+	"github.com/algorand/go-algorand/util/tlsutil"
 	"github.com/algorand/go-algorand/util/tokens"
 )
 
@@ -83,8 +85,22 @@ func (nc NodeController) AlgodClient() (algodClient client.RestClient, err error
 		return
 	}
 
-	// Build the client from the URL and API token
-	algodClient = client.MakeRestClient(algodURL, algodAPIToken)
+	var tlsConfig *tls.Config
+	if nc.algodDataDir != "" {
+		localConfig, loadErr := config.LoadConfigFromDisk(nc.algodDataDir)
+		if loadErr != nil && !os.IsNotExist(loadErr) {
+			return algodClient, loadErr
+		}
+		tlsConfig = tlsutil.MakeClientConfig(localConfig.TLSRequirePostQuantumKeyExchange, localConfig.TLSRequirePostQuantumSignature)
+		if localConfig.TLSCertFile != "" && localConfig.TLSKeyFile != "" {
+			tlsConfig, err = tlsutil.WithTrustedCertificate(tlsConfig, localConfig.TLSCertFile)
+			if err != nil {
+				return
+			}
+		}
+	}
+
+	algodClient = client.MakeRestClientWithTLS(algodURL, algodAPIToken, tlsConfig)
 	return
 }
 

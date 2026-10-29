@@ -19,6 +19,7 @@ package network
 import (
 	"container/heap"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -159,10 +160,12 @@ type GenesisInfo struct {
 
 // WebsocketNetwork implements GossipNode
 type WebsocketNetwork struct {
-	listener net.Listener
-	server   http.Server
-	router   *mux.Router
-	scheme   string // are we serving http or https ?
+	listener        net.Listener
+	server          http.Server
+	tlsConfig       *tls.Config
+	serverTLSConfig *tls.Config
+	router          *mux.Router
+	scheme          string // are we serving http or https ?
 
 	upgrader websocket.Upgrader
 
@@ -568,6 +571,13 @@ func (wn *WebsocketNetwork) transportConnPeers(outgoing bool) []Peer {
 }
 
 func (wn *WebsocketNetwork) setup() error {
+	wn.tlsConfig = makeClientTLSConfig(wn.config.TLSRequirePostQuantumKeyExchange, wn.config.TLSRequirePostQuantumSignature)
+	wn.serverTLSConfig = makeTLSConfig(wn.config.TLSRequirePostQuantumKeyExchange, wn.config.TLSRequirePostQuantumSignature)
+	if wn.config.TLSRequirePostQuantumSignature && wn.config.TLSCertFile != "" && wn.config.TLSKeyFile != "" {
+		if err := checkTLSServerCertificate(wn.config.TLSCertFile, wn.config.TLSKeyFile); err != nil {
+			return fmt.Errorf("TLS signature policy: %w", err)
+		}
+	}
 	var preferredResolver dnssec.ResolverIf
 	if wn.config.DNSSecurityRelayAddrEnforced() {
 		preferredResolver = dnssec.MakeDefaultDnssecResolver(wn.config.FallbackDNSResolverAddress, wn.log)
@@ -776,6 +786,7 @@ func (wn *WebsocketNetwork) httpdThread() {
 	defer wn.wg.Done()
 	var err error
 	if wn.config.TLSCertFile != "" && wn.config.TLSKeyFile != "" {
+		wn.server.TLSConfig = wn.serverTLSConfig
 		err = wn.server.ServeTLS(wn.listener, wn.config.TLSCertFile, wn.config.TLSKeyFile)
 	} else {
 		err = wn.server.Serve(wn.listener)
@@ -1128,6 +1139,14 @@ func (wn *WebsocketNetwork) ServeHTTP(response http.ResponseWriter, request *htt
 			wn.log.Warnf("ws failed to write response '%s' : n = %d err = %v", message, n, err)
 		}
 		return
+	}
+	if request.TLS != nil {
+		recordTLSConnection(request.TLS)
+		if err := checkTLSKeyExchange(request.TLS, wn.config.TLSRequirePostQuantumKeyExchange); err != nil {
+			wn.log.With("err", err).Warn("rejecting TLS connection with unsupported key exchange")
+			response.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
 	}
 
 	if wn.checkIncomingConnectionVariables(response, request, trackedRequest.remoteAddress()) != http.StatusOK {
@@ -2020,7 +2039,7 @@ func (wn *WebsocketNetwork) GetHTTPClient(address string) (*http.Client, error) 
 	}
 
 	maxIdleConnsPerHost := int(wn.config.ConnectionsRateLimitingCount)
-	rltr := limitcaller.MakeRateLimitingBoundTransport(wn.phonebook, limitcaller.DefaultQueueingTimeout, &wn.dialer, maxIdleConnsPerHost, url.Host)
+	rltr := limitcaller.MakeRateLimitingBoundTransport(wn.phonebook, limitcaller.DefaultQueueingTimeout, &wn.dialer, maxIdleConnsPerHost, url.Host, wn.tlsConfig)
 	return &http.Client{
 		Transport: &HTTPPAddressBoundTransport{
 			address,
@@ -2093,6 +2112,7 @@ func (wn *WebsocketNetwork) tryConnect(netAddr, gossipAddr string) {
 		NetDialContext:    wn.dialer.DialContext,
 		NetDial:           wn.dialer.Dial,
 		MaxHeaderSize:     wn.wsMaxHeaderBytes,
+		TLSClientConfig:   wn.tlsConfig,
 	}
 
 	conn, response, err := websocketDialer.DialContext(wn.ctx, gossipAddr, requestHeader)
@@ -2142,6 +2162,15 @@ func (wn *WebsocketNetwork) tryConnect(netAddr, gossipAddr string) {
 		err2 = conn.CloseWithoutFlush()
 		if err2 != nil {
 			wn.log.Infof("tryConnect: failed to CloseWithoutFlush to connection for %s: %v", conn.RemoteAddr().String(), err2)
+		}
+	}
+	if tlsConn, ok := conn.UnderlyingConn().(*tls.Conn); ok {
+		state := tlsConn.ConnectionState()
+		recordTLSConnection(&state)
+		if err = checkTLSKeyExchange(&state, wn.config.TLSRequirePostQuantumKeyExchange); err != nil {
+			wn.log.With("err", err).Warn("rejecting TLS connection with unsupported key exchange")
+			closeEarly("Unsupported TLS key exchange")
+			return
 		}
 	}
 

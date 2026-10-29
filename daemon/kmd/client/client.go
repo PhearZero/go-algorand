@@ -17,7 +17,9 @@
 package client
 
 import (
+	"crypto/tls"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -25,7 +27,7 @@ const (
 	timeoutSecs = 120
 )
 
-// KMDClient is the client used to interact with the kmd API over its socket
+// KMDClient is the client used to interact with the kmd API.
 type KMDClient struct {
 	httpClient http.Client
 	apiToken   string
@@ -39,12 +41,35 @@ func makeHTTPClient() http.Client {
 	return client
 }
 
+func makeHTTPClientWithTLS(tlsConfig *tls.Config) http.Client {
+	client := makeHTTPClient()
+	if tlsConfig != nil {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = tlsConfig
+		client.Transport = transport
+	}
+	return client
+}
+
 // MakeKMDClient instantiates a KMDClient for the given sockFile and apiToken
 func MakeKMDClient(address string, apiToken string) (KMDClient, error) {
+	return MakeKMDClientWithTLS(address, apiToken, nil)
+}
+
+// MakeKMDClientWithTLS instantiates a KMDClient with the supplied TLS policy.
+func MakeKMDClientWithTLS(address string, apiToken string, tlsConfig *tls.Config) (KMDClient, error) {
 	kcl := KMDClient{
-		httpClient: makeHTTPClient(),
+		httpClient: makeHTTPClientWithTLS(tlsConfig),
 		apiToken:   apiToken,
-		address:    address,
+		address:    strings.TrimRight(address, "/"),
 	}
 	return kcl, nil
+}
+
+func (kcl KMDClient) endpointURL(path string) string {
+	address := kcl.address
+	if !strings.HasPrefix(address, "http://") && !strings.HasPrefix(address, "https://") {
+		address = "http://" + address
+	}
+	return address + "/" + path
 }
